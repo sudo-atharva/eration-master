@@ -22,6 +22,7 @@ if (!function_exists('mysqli_connect')) {
   function mysqli_connect_error() { return ''; }
   function mysqli_error($conn) { return $conn->errorInfo()[2] ?? ''; }
   function mysqli_real_escape_string($conn, $s) { return str_replace("'", "''", (string)$s); }
+  function mysqli_insert_id($conn) { return (int)$conn->lastInsertId(); }
 
   function mysqli_query($conn, $sql) {
     $stmt = $conn->query($sql);

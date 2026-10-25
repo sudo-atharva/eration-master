@@ -94,6 +94,12 @@ if (isset($_SESSION['rationcard_no'])) {
                 </a>
             </li>
             <li>
+                <a href="node.php">
+                    <i class='bx bx-fingerprint'></i>
+                    <span class="links_name">Ration Node</span>
+                </a>
+            </li>
+            <li>
                 <a href="avail_stock.php">
                     <i class='bx bx-coin-stack'></i>
                     <span class="links_name">Check Available Stock</span>

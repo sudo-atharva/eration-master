@@ -69,15 +69,16 @@ if ($action === 'enroll') {
 }
 
 if ($action === 'add_customer') {
-    $err = add_customer($conn, $_POST, $distributor);
+    $err = add_customer($conn, $_POST, $distributor, $_FILES['photo'] ?? null);
     node_json($err ? ['ok' => false, 'msg' => $err] : ['ok' => true]);
 }
 
 // ---- Page ----
 $pincode = (int)$distributor['pincode'];
 $customers = mysqli_fetch_all(mysqli_query($conn,
-    "SELECT u.rationcard_no, u.fname, u.lname, (SELECT COUNT(*) FROM tbl_fingerprint f WHERE f.pds_no=$pds AND f.rationcard_no=u.rationcard_no) AS fingers
-     FROM tbl_user u WHERE u.pincode=$pincode ORDER BY u.fname"), MYSQLI_ASSOC);
+    "SELECT u.rationcard_no, u.fname, u.mname, u.lname, u.contact_no, r.card_type, r.f_members,
+        (SELECT COUNT(*) FROM tbl_fingerprint f WHERE f.pds_no=$pds AND f.rationcard_no=u.rationcard_no) AS fingers
+     FROM tbl_user u LEFT JOIN tbl_ration r ON r.rationcard_no=u.rationcard_no WHERE u.pincode=$pincode ORDER BY u.fname"), MYSQLI_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="en" dir="ltr">
@@ -102,7 +103,15 @@ $customers = mysqli_fetch_all(mysqli_query($conn,
     .btn.grey { background: #888; }
     .waiting { font-size: 18px; color: #555; }
     .total { font-size: 22px; font-weight: 700; margin-top: 16px; }
-    select { padding: 8px; min-width: 260px; }
+    .scroll { overflow-x: auto; }
+    .tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .tools input, .tools select { padding: 8px; border: 1px solid #ccc; border-radius: 6px; }
+    .tools input { flex: 1 1 240px; min-width: 0; }
+    #custTable td { vertical-align: middle; }
+    #custTable .btn { padding: 6px 12px; margin: 2px 4px 2px 0; }
+    .tag { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: #e8f5e9; color: #2e7d32; white-space: nowrap; }
+    .tag.no { background: #fdecea; color: #c0392b; }
+    .muted { color: #777; }
     </style>
 </head>
 
@@ -113,11 +122,60 @@ $customers = mysqli_fetch_all(mysqli_query($conn,
             <img src="./images/logo3.png" height="40px">
         </div>
         <ul class="nav-links">
-            <li><a href="dist_dash.php"><i class='bx bx-grid-alt'></i><span class="links_name">Dashboard</span></a></li>
-            <li><a href="#" class="active"><i class='bx bx-fingerprint'></i><span class="links_name">Ration Node</span></a></li>
-            <li><a href="avail_stock.php"><i class='bx bx-coin-stack'></i><span class="links_name">Check Available Stock</span></a></li>
-            <li><a href="customer.php"><i class='bx bx-user'></i><span class="links_name">Customers</span></a></li>
-            <li class="log_out"><a href="logout.php"><i class='bx bx-log-out'></i><span class="links_name">Log out</span></a></li>
+            <li>
+                <a href="dist_dash.php">
+                    <i class='bx bx-grid-alt'></i>
+                    <span class="links_name">Dashboard</span>
+                </a>
+            </li>
+            <li>
+                <a href="#" class="active">
+                    <i class='bx bx-fingerprint'></i>
+                    <span class="links_name">Ration Node</span>
+                </a>
+            </li>
+            <li>
+                <a href="avail_stock.php">
+                    <i class='bx bx-coin-stack'></i>
+                    <span class="links_name">Check Available Stock</span>
+                </a>
+            </li>
+            <li>
+                <a href="apply_stock.php">
+                    <i class='bx bx-list-ul'></i>
+                    <span class="links_name">Apply For Stock</span>
+                </a>
+            </li>
+            <li>
+                <a href="customer.php">
+                    <i class='bx bx-user'></i>
+                    <span class="links_name">Customers</span>
+                </a>
+            </li>
+            <li>
+                <a href="recent_trans.php">
+                    <i class='bx bx-message'></i>
+                    <span class="links_name">Recent Transactions</span>
+                </a>
+            </li>
+            <li>
+                <a href="statement.php">
+                    <i class='bx bx-message'></i>
+                    <span class="links_name">View Statement</span>
+                </a>
+            </li>
+            <li>
+                <a href="edit_profile.php">
+                    <i class='bx bx-cog'></i>
+                    <span class="links_name">Edit Profile</span>
+                </a>
+            </li>
+            <li class="log_out">
+                <a href="logout.php">
+                    <i class='bx bx-log-out'></i>
+                    <span class="links_name">Log out</span>
+                </a>
+            </li>
         </ul>
     </div>
     <section class="home-section">
@@ -132,27 +190,37 @@ $customers = mysqli_fetch_all(mysqli_query($conn,
             </div>
         </nav>
 
-        <div class="home-content" style="display:block;padding:0 20px">
+        <div class="home-content" style="padding:104px 20px 20px">
             <div class="panel">
                 <h2>Customer at node</h2>
                 <div id="live" class="waiting">Loading…</div>
             </div>
 
             <div class="panel">
-                <h2>Enroll fingerprint</h2>
-                <select id="enrollCard">
-                    <?php foreach ($customers as $c) { ?>
-                    <option value="<?= htmlspecialchars($c['rationcard_no']) ?>"<?= ($_GET['new'] ?? '') === $c['rationcard_no'] ? ' selected' : '' ?>>
-                        <?= htmlspecialchars($c['fname'] . ' ' . $c['lname'] . ' — ' . $c['rationcard_no'] . ($c['fingers'] ? " ({$c['fingers']} enrolled)" : '')) ?>
-                    </option>
-                    <?php } ?>
-                </select>
-                <button class="btn" onclick="enroll()">Enroll on node</button>
+                <h2>Customers</h2>
+                <div class="tools">
+                    <input id="q" type="search" placeholder="Search name, ration card or phone…" value="<?= htmlspecialchars($_GET['new'] ?? '') ?>" oninput="listCustomers()">
+                    <select id="listBy" onchange="listCustomers()">
+                        <option value="">List: all customers</option>
+                        <option value="enrolled">Fingerprint enrolled</option>
+                        <option value="pending">Not enrolled</option>
+                        <?php foreach (CARD_TYPES as $k => $label) { ?><option value="card:<?= $k ?>"><?= htmlspecialchars($label) ?></option><?php } ?>
+                    </select>
+                    <select id="sortBy" onchange="listCustomers()">
+                        <option value="name">Sort by name</option>
+                        <option value="rc">Sort by ration card</option>
+                        <option value="members">Sort by family size</option>
+                    </select>
+                </div>
+                <div class="scroll">
+                    <table class="node-table" id="custTable"></table>
+                </div>
+                <p class="muted" id="custCount"></p>
             </div>
 
             <div class="panel">
                 <h2>Add customer</h2>
-                <form id="addForm" onsubmit="addCustomer(event)">
+                <form id="addForm" onsubmit="addCustomer(event)" enctype="multipart/form-data">
                     <?php customer_form_fields(); ?>
                     <button class="btn">Add customer</button>
                 </form>
@@ -196,23 +264,23 @@ $customers = mysqli_fetch_all(mysqli_query($conn,
             live.innerHTML = '<p class="waiting">Waiting for a customer to scan their finger on the node…</p>';
         } else if (s.status === 'identified') {
             allowance = d.allowance;
-            live.innerHTML = who(s) + `<table class="node-table"><tr><th>Item</th><th>Monthly quota</th><th>Taken</th>
+            live.innerHTML = who(s) + `<div class="scroll"><table class="node-table"><tr><th>Item</th><th>Monthly quota</th><th>Taken</th>
                 <th>Remaining</th><th>Ration price</th><th>Full price</th><th>Give (kg)</th><th>Cost</th></tr>` +
                 allowance.map((a, i) => `<tr><td>${esc(a.name)}</td><td>${a.quota} kg</td><td>${a.taken} kg</td><td><b>${a.remaining} kg</b></td>
                 <td>₹${a.price}/kg</td><td>₹${a.market_price}/kg</td>
                 <td><input id="kg${a.stock_id}" type="number" min="0" max="50" step="0.1" value="${a.remaining}" oninput="cost(${i})"></td>
                 <td id="cost${a.stock_id}"></td></tr>`).join('') +
-                `</table><p><button class="btn" onclick="dispense(${s.id})">Dispense</button>
+                `</table></div><p><button class="btn" onclick="dispense(${s.id})">Dispense</button>
                 <button class="btn grey" onclick="cancelSession()">Cancel</button></p>`;
             allowance.forEach((_, i) => cost(i));
         } else if (s.status === 'approved' || s.status === 'dispensing') {
             live.innerHTML = who(s) + '<p class="waiting">Node is dispensing… keep the bag under the chute.</p>';
         } else if (s.status === 'done') {
             const total = d.results.reduce((t, r) => t + parseFloat(r.amount), 0);
-            live.innerHTML = who(s) + `<table class="node-table"><tr><th>Item</th><th>Given</th><th>From quota</th><th>Extra (full price)</th><th>Amount</th></tr>` +
+            live.innerHTML = who(s) + `<div class="scroll"><table class="node-table"><tr><th>Item</th><th>Given</th><th>From quota</th><th>Extra (full price)</th><th>Amount</th></tr>` +
                 d.results.map(r => `<tr><td>${esc(r.stock_name)}</td><td>${(+r.kg).toFixed(3)} kg</td><td>${(+r.quota_kg).toFixed(3)} kg</td>
                 <td class="${r.extra_kg > 0 ? 'extra' : ''}">${(+r.extra_kg).toFixed(3)} kg</td><td>₹ ${(+r.amount).toFixed(2)}</td></tr>`).join('') +
-                `</table><p class="total">Collect ₹ ${total.toFixed(2)}</p>`;
+                `</table></div><p class="total">Collect ₹ ${total.toFixed(2)}</p>`;
         } else if (s.status === 'enroll') {
             live.innerHTML = who(s) + '<p class="waiting">Enrolling: ask the customer to place the same finger on the node twice.</p>';
         } else if (s.status === 'enrolled') {
@@ -239,13 +307,36 @@ $customers = mysqli_fetch_all(mysqli_query($conn,
         refresh();
     }
 
-    async function enroll() {
+    async function enroll(rc) {
         const body = new FormData();
-        body.append('rationcard_no', document.getElementById('enrollCard').value);
+        body.append('rationcard_no', rc);
         const r = await (await fetch('node.php?action=enroll', { method: 'POST', body })).json();
         if (!r.ok) alert(r.msg);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         refresh();
     }
+
+    const customers = <?= json_encode($customers) ?>;
+    function listCustomers() {
+        const q = document.getElementById('q').value.trim().toLowerCase();
+        const by = document.getElementById('listBy').value, sort = document.getElementById('sortBy').value;
+        const rows = customers.filter(c => {
+            if (by === 'enrolled' && !+c.fingers) return false;
+            if (by === 'pending' && +c.fingers) return false;
+            if (by.startsWith('card:') && c.card_type !== by.slice(5)) return false;
+            return !q || [c.fname, c.mname, c.lname, c.rationcard_no, c.contact_no].join(' ').toLowerCase().includes(q);
+        }).sort((a, b) => sort === 'rc' ? a.rationcard_no.localeCompare(b.rationcard_no)
+            : sort === 'members' ? (b.f_members || 0) - (a.f_members || 0)
+            : (a.fname + a.lname).localeCompare(b.fname + b.lname));
+        document.getElementById('custTable').innerHTML = '<tr><th>Name</th><th>Ration card</th><th>Card</th><th>Members</th><th>Fingerprint</th><th></th></tr>' +
+            (rows.map(c => `<tr><td>${esc(c.fname + ' ' + c.lname)}<br><span class="muted">${esc(c.contact_no || '')}</span></td>
+                <td>${esc(c.rationcard_no)}</td><td>${esc(c.card_type || '-')}</td><td>${c.f_members || '-'}</td>
+                <td>${+c.fingers ? `<span class="tag">${c.fingers} enrolled</span>` : '<span class="tag no">Not enrolled</span>'}</td>
+                <td style="white-space:nowrap"><button class="btn" onclick="enroll('${esc(c.rationcard_no)}')">Enroll</button></td></tr>`).join('')
+            || '<tr><td colspan="6" class="muted">No customers match.</td></tr>');
+        document.getElementById('custCount').textContent = `Showing ${rows.length} of ${customers.length} customers`;
+    }
+    listCustomers();
 
     async function addCustomer(ev) {
         ev.preventDefault();

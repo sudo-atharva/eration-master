@@ -39,6 +39,12 @@
             <span class="links_name">Dashboard</span>
           </a>
         </li>
+            <li>
+                <a href="node.php">
+                    <i class='bx bx-fingerprint'></i>
+                    <span class="links_name">Ration Node</span>
+                </a>
+            </li>
         <li>
           <a href="#">
             <i class='bx bx-coin-stack' ></i>
